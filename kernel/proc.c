@@ -145,6 +145,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
+  p->tra_mask = 0;
 
   return p;
 }
@@ -298,6 +299,7 @@ fork(void)
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
+  np->tra_mask = p->tra_mask;
 
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
@@ -685,4 +687,18 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+
+uint64 count_freeproc(void){
+  struct proc *p;
+  int cnt = 0;
+
+  for (p = proc; p < &proc[NPROC]; p++){
+    if(p->state != UNUSED){
+      cnt++;
+    }
+  }
+
+  return cnt;
 }

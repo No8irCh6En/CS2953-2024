@@ -1,0 +1,60 @@
+**Maybe it's easier to read in `.md` suffix**
+
+### Lab-Util-Syscall-report
+
+#### Sleep
+
+Sleep part can be easily done by the following steps:
+
+* (follow the instructions on tutorial pdf file)
+* use `atoi()` to convert input to integer and use `sleep()` to sleep
+* `exit(-1)` when `argc < 2` and give usage feedback
+
+#### Pingpong
+
+Pingpong part can be easily done by the following steps:
+
+* (follow the instructions on tutorial pdf file)
+* create `p1[2]` and `p2[2]` for parent and child process
+* ban `p1[0]` and `p2[1]` for parent process and other for child process because their is no need to use these pipes (to read and write)
+* parent process keep waiting to reap the child process
+* child process call `read()` to ensure the connection is established
+
+#### Syscall-tracing
+
+Some views on tutorial pdf:
+
+* `entry()` in "user/usys.pl" writes the assembly file
+* `syscalls[]` is a function array where its index is the responding syscall number
+
+Syscall-tracing part can be easily done by the following steps:
+
+* (follow the instructions on tutorial pdf file)
+* add `tra_mask` in struct `proc` to save the command argument
+* create `syscall_names[]` to easily get the name of corresponding syscall number
+* realize `syscall()` in "kernal/syscall.c" by using `tra_mask`
+
+#### Syscall-info
+
+Syscall-info part can be easily done by the following steps:
+
+* (follow the instructions on tutorial pdf file)
+* same process in Syscall-tracing
+* realize `count_freemem()` and `count_freeproc()` by referring `kalloc()` and `procdump()` function
+* `return -1` when `copyout()` fails
+
+#### Some reflections
+
+Why not keep away the dependency of each `.h` file?
+
+For example, the following method might be handy:
+
+```h
+#ifndef ...
+#define ...
+#endif 
+```
+
+the previous format may meet problem like:
+
+* Copying header from "user/echo.c" to "user/sleep.c" triggers auto formatting which causes the dependency problems on `.h` files
