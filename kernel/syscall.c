@@ -103,6 +103,8 @@ extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
+extern uint64 sys_sigalarm(void);
+extern uint64 sys_sigreturn(void);
 
 #ifdef LAB_NET
 extern uint64 sys_connect(void);
@@ -137,6 +139,8 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_trace]   sys_trace,
 [SYS_sysinfo] sys_sysinfo,
+[SYS_sigalarm] sys_sigalarm,
+[SYS_sigreturn] sys_sigreturn
 #ifdef LAB_NET
 [SYS_connect] sys_connect,
 #endif
@@ -149,7 +153,7 @@ char* syscall_names[] = {
     "",       "fork",    "exit",    "wait",     "pipe",    "read",    "kill",
     "exec",   "fstat",   "chdir",   "dup",      "getpid",  "sbrk",    "sleep",
     "uptime", "open",    "write",   "mknod",    "unlink",  "link",    "mkdir",
-    "close",  "trace",   "sysinfo", "sigalarm", "greturn", "symlink", "mmap",
+    "close",  "trace",   "sysinfo", "sigalarm", "sigreturn", "symlink", "mmap",
     "munmap", "connect", "pgaccess"};
 
 void
@@ -167,8 +171,10 @@ syscall(void)
         printf("%d: syscall %s -> %d\n", p->pid, syscall_names[num] , p->trapframe->a0);
     }
   } else {
-    printf("%d %s: unknown sys call %d\n",
-            p->pid, p->name, num);
+    printf("%d %s: unknown sys call %d\n", p->pid, p->name, num);
     p->trapframe->a0 = -1;
+  }
+  if (num == SYS_sigreturn) {
+      p->trapframe->a0 = p->prev_a0;
   }
 }

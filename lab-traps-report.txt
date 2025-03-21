@@ -1,0 +1,120 @@
+**Maybe it's easier to read in `.md` suffix**
+
+### Lab-Traps-report
+
+#### Backtrace
+
+just follow the guide.
+
+> memory allocated for each kernel stack consists of a single page-aligned page, so that all the stack frames for a given stack are on the same page. 
+
+So we have the loop condition:
+
+```c++
+uint64 page = PGROUNDDOWN(frame_p);
+while(frame_p > page){
+    ...
+}
+```
+
+> Note that the return address lives at a 
+fixed offset (-8) from the frame pointer of a stackframe, and that the saved frame pointer 
+lives at fixed offset (-16) from the frame pointer.
+
+So we have:
+
+```c++
+while(frame_p > page){
+    printf("%p\n", *(uint64*)(frame_p - 8));
+    frame_p = *(uint64*)(frame_p - 16);
+}
+```
+
+#### Alarm
+
+~~Testpoint motivated~~
+
+##### For test0:
+
+We set some new vars in struct `proc`:
+
+```c++
+struct proc{
+    ...
+    int interval;                // -1 if uninitialized
+    void (*handler)(void);
+    int tick_passed;             // For sys_alarm()
+}
+```
+
+When function `usertrap()` is called, we pass these args in:
+
+```c++
+...
+if(which_dev == 2){
+    p->tick_passed++;
+    p->trapframe->epc = (uint64)p->handler;
+    ...
+}
+```
+
+##### For test1/2:
+
+We should specify the proc into handler/not-handler by creating a new variable in struct `proc` called `is_handler`.
+
+To save the previous result, we create a new pointer to save previous trapframe information called `prev_trapf`.
+
+```c++
+struct proc{
+    ...
+    int is_handler;
+    struct trapframe* prev_trapf;
+}
+```
+
+We should consider the initialization of `prev_trapf` (i.e. allocation and free)
+
+```c++
+static struct proc* allocproc(void){
+    ...
+    if((p->prev_trapf = (struct trapframe*)kalloc()) == 0){
+      freeproc(p);
+      release(&p->lock);
+      return 0;
+  }
+  ...
+}
+...
+static void freeproc(struct proc *p){
+    if(p->prev_trapf)
+        kfree((void*)p->prev_trapf);
+    ...
+}
+```
+
+We also need to change the function `usertrap()`:
+
+```c++
+if(which_dev == 2){
+      p->tick_passed++;
+      if(p->tick_passed == p->interval && p->is_handler == 0){
+
+          p->tick_passed = 0;
+          p->is_handler = 1;
+          *(p->prev_trapf) = *(p->trapframe);
+
+          p->trapframe->epc = (uint64)p->handler;
+      }
+      yield();
+}
+```
+
+##### For test3:
+
+extra storage of register a0.
+
+Nothing special happens actually.
+
+```c++
+    p->prev_a0 = p->trapframe->a0;
+```

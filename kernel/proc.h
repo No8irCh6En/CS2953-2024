@@ -106,4 +106,12 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   uint64 tra_mask;             // For sys_trace()
+
+  int interval;                // -1 if uninitialized
+  void (*handler)(void);
+  int tick_passed;             // For sys_alarm()
+
+  int is_handler;
+  struct trapframe* prev_trapf;
+  uint64 prev_a0;
 };
