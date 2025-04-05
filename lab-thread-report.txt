@@ -1,0 +1,21 @@
+**Maybe it's easier to read in `.md` suffix**
+
+### Lab-Thread-report
+
+#### uthread
+
+~~Actually there's a totally same code in "kernal/swtch.S"~~
+
+If the case is not so extreme, I think it's ok to just store all callee-saved registers at the very begin of the `STACKPAGE`.
+
+But for safety, I created a new struct called `callee_reg` and put it in the first position in struct `thread` so that `0(a0)` refers to one of the callee-register.
+
+#### pthread
+
+We can see that function `get` actually does no change to the information. So there is no need to lock `get`.
+
+So we can just add `lock` and `unlock` respectively at the beginning and end of the `put` function.
+
+#### barrier
+
+Every time `barrier()` was called, we add one to the counter. And when it gets to the target we want, just use `broadcast` and thus release.

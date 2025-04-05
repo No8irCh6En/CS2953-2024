@@ -10,8 +10,14 @@
 #define STACK_SIZE  8192
 #define MAX_THREAD  4
 
+struct callee_reg {
+  uint64 ra;
+  uint64 sp;
+  uint64 s[12];
+};
 
 struct thread {
+  struct     callee_reg reg_list; /* callee-saved registers */
   char       stack[STACK_SIZE]; /* the thread's stack */
   int        state;             /* FREE, RUNNING, RUNNABLE */
 };
@@ -60,6 +66,7 @@ thread_schedule(void)
      * Invoke thread_switch to switch from t to next_thread:
      * thread_switch(??, ??);
      */
+    thread_switch((uint64)t, (uint64)next_thread);
   } else
     next_thread = 0;
 }
@@ -74,6 +81,10 @@ thread_create(void (*func)())
   }
   t->state = RUNNABLE;
   // YOUR CODE HERE
+  memset((void*)&t->reg_list, 0, sizeof(struct callee_reg));
+  memset((void*)t->stack, 0, STACK_SIZE);
+  t->reg_list.sp = (uint64)t->stack + STACK_SIZE;
+  t->reg_list.ra = (uint64)func;
 }
 
 void 
