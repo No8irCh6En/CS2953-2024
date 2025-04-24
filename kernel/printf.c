@@ -119,12 +119,14 @@ void
 panic(char *s)
 {
   pr.locking = 0;
+
+  backtrace();
   printf("panic: ");
   printf(s);
   printf("\n");
   panicked = 1; // freeze uart output from other CPUs
-  for(;;)
-    ;
+  for (;;)
+      ;
 }
 
 void
