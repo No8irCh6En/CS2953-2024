@@ -81,9 +81,12 @@ kalloc(void)
 
   acquire(&kmem[cpu_id].lock);
   r = kmem[cpu_id].freelist;
-  if(r)
+  if(r){
     kmem[cpu_id].freelist = r->next;
+    release(&kmem[cpu_id].lock);
+  }
   else{
+    release(&(kmem[cpu_id].lock));
     for (int i = 0;i < NCPU; i++){
       if (i == cpu_id) continue;
       acquire(&kmem[i].lock);
@@ -96,7 +99,7 @@ kalloc(void)
       release(&kmem[i].lock);
     }
   }
-  release(&(kmem[cpu_id].lock));
+
 
   pop_off();
 

@@ -1,0 +1,21 @@
+This time I was a little bit tired, so the report might be simple.
+
+The Memory Allocation Section is quite easy. Just copy the struct kmem N times, i.e. kmem to kmem[N].
+
+When you want acquire the cpu id, just remember to use fuction push_off before using it and fuction pop_off after completion.
+
+For Buffer Cache Section, we will mainly talk about the idea.
+
+We use bcache.head[i] to act as the i-th bucket. Every time a cache is getten, we may put that cache in the corresponding bucket.
+
+When we try to get a cache with dev and blockno, we can use hash to find the bucket id, and then find the corresponding cache if that existed. (*)
+
+If not, we just find a cache whose refcnt is 0 and steal it to the corresponding bucket. (**)
+
+Then we should think about avoiding the deadlock.
+
+The basic observation is that (*) and (**)'s lock can be sequentially acquire and released. There is no need to acquire two locks and release them.
+
+To avoid the freeing free block situation, we need double check whether there is a block that is represented as the cache with same dev and blockno.
+
+So when we try to give out the pointer, we should first find whether there is a block with same dev and blockno. 
