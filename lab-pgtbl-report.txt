@@ -1,0 +1,23 @@
+**Maybe it's easier to read in `.md` suffix**
+
+### Lab-Pgtbl-reprot
+
+#### Speeding up syscall
+
+Allocate some memory for usyscallpage in allocproc() function.
+
+Then free it in freeproc() function.
+
+#### Print a pagetable
+
+Copy the freewalk function.
+
+Use static int level to remember the depth.
+
+#### Detecting which pages have been accessed
+
+Set PTE_A to (1L << 6) according to the riscV rule.
+
+Use walk to find the address and thus renew the mask.
+
+Be careful to set *pte's PTE_A position to zero.

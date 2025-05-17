@@ -140,7 +140,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_trace]   sys_trace,
 [SYS_sysinfo] sys_sysinfo,
 [SYS_sigalarm] sys_sigalarm,
-[SYS_sigreturn] sys_sigreturn
+[SYS_sigreturn] sys_sigreturn,
 #ifdef LAB_NET
 [SYS_connect] sys_connect,
 #endif

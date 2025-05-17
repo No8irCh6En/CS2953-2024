@@ -114,4 +114,7 @@ struct proc {
   int is_handler;
   struct trapframe* prev_trapf;
   uint64 prev_a0;
+#ifdef LAB_PGTBL
+  struct usyscall* usyscallpage;
+#endif
 };
