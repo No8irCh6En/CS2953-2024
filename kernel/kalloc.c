@@ -9,6 +9,14 @@
 #include "riscv.h"
 #include "defs.h"
 
+#define PA2PGID(p) (((p)-KERNBASE)/PGSIZE)
+#define PG_SIZE_REF PA2PGID(PHYSTOP)
+
+int page_ref[PG_SIZE_REF];
+struct spinlock page_ref_lock;
+
+#define PA2PGREF(p) page_ref[PA2PGID((uint64)p)]
+
 void freerange(void *pa_start, void *pa_end);
 
 extern char end[]; // first address after kernel.
@@ -28,6 +36,7 @@ kinit()
 {
   for(int i = 0; i < NCPU; i++)
     initlock(&(kmem[i].lock), "kmem");
+  initlock(&page_ref_lock, "page_ref_lock");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -53,19 +62,27 @@ kfree(void *pa)
     panic("kfree");
 
   // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
 
-  r = (struct run*)pa;
+  acquire(&page_ref_lock);
 
-  push_off();
-  int cpu_id = cpuid();
+  if(--(PA2PGREF(pa)) <= 0){
 
-  acquire(&(kmem[cpu_id].lock));
-  r->next = kmem[cpu_id].freelist;
-  kmem[cpu_id].freelist = r;
-  release(&kmem[cpu_id].lock);
+    r = (struct run*)pa;
 
-  pop_off();
+    memset(pa, 1, PGSIZE);
+
+    push_off();
+    int cpu_id = cpuid();
+
+    acquire(&(kmem[cpu_id].lock));
+    r->next = kmem[cpu_id].freelist;
+    kmem[cpu_id].freelist = r;
+    release(&kmem[cpu_id].lock);
+
+    pop_off();
+
+  }
+  release(&page_ref_lock);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -103,8 +120,11 @@ kalloc(void)
 
   pop_off();
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+
+    PA2PGREF(r) = 1;
+  }
   return (void*)r;
 }
 
@@ -123,4 +143,27 @@ uint64 count_freemem(void){
   }
 
   return cnt * PGSIZE;
+}
+
+void add1ref(void* pa){
+    acquire(&page_ref_lock);
+    PA2PGREF(pa)++;
+    release(&page_ref_lock);
+}
+
+void* kcopy_or_give(void* pa){
+    acquire(&page_ref_lock);
+    if (PA2PGREF(pa) > 1){
+        PA2PGREF(pa)--;
+        uint64 new_pg = (uint64)kalloc();
+        if(new_pg == 0){
+            release(&page_ref_lock);
+            return 0;
+        }
+        memmove((void*)new_pg, pa, PGSIZE);
+        release(&page_ref_lock);
+        return (void*)new_pg;
+    }
+    release(&page_ref_lock);
+    return pa;
 }

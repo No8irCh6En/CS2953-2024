@@ -11,6 +11,10 @@ uint ticks;
 
 extern char trampoline[], uservec[], userret[];
 
+extern int isCOWpage(uint64 va);
+
+extern int uvmcowcopy(uint64 va);
+
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
 
@@ -28,6 +32,7 @@ trapinithart(void)
 {
   w_stvec((uint64)kernelvec);
 }
+
 
 //
 // handle an interrupt, exception, or system call from user space.
@@ -67,10 +72,17 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if((r_scause() == 15) && isCOWpage(r_stval())){
+    // copy-on-write
+    if(uvmcowcopy(r_stval()) == -1)
+      // p->killed = 1;
+      setkilled(p);
+
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);
+    // p->killed = 1;
   }
 
   if(killed(p))
