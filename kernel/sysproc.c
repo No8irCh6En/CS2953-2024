@@ -6,6 +6,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "sysinfo.h"
+#include "stat.h"
 
 uint64 count_freeproc(void);
 uint64 count_freemem(void);
