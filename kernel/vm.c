@@ -5,6 +5,10 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "file.h"
+#include "proc.h"
+
+#include "fcntl.h"
 
 /*
  * the kernel's page table.
@@ -187,7 +191,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+      // panic("uvmunmap: not mapped");
+      continue;
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -448,4 +453,59 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int mmap_handler(uint64 va, int scause) {
+    struct proc* p = myproc();
+    struct vma* vma = 0;
+    if (va >= MAXVA) {
+        return -1;
+    }
+
+    for (int i = 0; i < NVMA; i++) {
+        vma = &(p->vmas[i]);
+        if (vma->valid == 1 && va >= vma->addr &&
+            va < vma->addr + PGROUNDUP(vma->len)) {
+            break;
+        }
+    }
+    if ( vma == 0) {
+        return -1;
+    }
+
+    if (scause == 13 && !(vma->prot & PROT_READ)) {
+        return -1;
+    }
+    if (scause == 15 && !(vma->prot & PROT_WRITE)) {
+        return -1;
+    }
+
+    va = PGROUNDDOWN(va);
+    void* pa = kalloc();
+    if (pa == 0) {
+        panic("mmap_handler: kalloc failed");
+    }
+    memset(pa, 0, PGSIZE);
+
+    struct file* f = vma->file;
+    ilock(f->ip);
+    readi(f->ip, 0, (uint64)pa, vma->offset + PGROUNDDOWN(va - vma->addr), PGSIZE);
+    iunlock(f->ip);
+
+    int perm = PTE_U;
+    if (vma->prot & PROT_READ) {
+        perm |= PTE_R;
+    }
+    if (vma->prot & PROT_WRITE) {
+        perm |= PTE_W;
+    }
+    if (vma->prot & PROT_EXEC) {
+        perm |= PTE_X;
+    }
+    if (mappages(p->pagetable, va, PGSIZE, (uint64)pa, perm) < 0) {
+        printf("mmap_handler: failed\n");
+        kfree(pa);
+        return -1;
+    }
+    return 0;
 }

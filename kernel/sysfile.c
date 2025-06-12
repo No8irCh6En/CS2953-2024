@@ -15,6 +15,7 @@
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
+#include "memlayout.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -502,4 +503,96 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+uint64 sys_mmap(void) {
+    uint64 addr;
+    int length, prot, flags, fd, offset;
+    struct proc* p = myproc();
+
+    argaddr(0, &addr);
+    argint(1, &length);
+    argint(2, &prot);
+    argint(3, &flags);
+    argint(4, &fd);
+    argint(5, &offset);
+
+    struct file* file = p->ofile[fd];
+    if ((!(file->writable)) && (flags & MAP_SHARED) && (prot & PROT_WRITE)) {
+        return -1;
+    }
+    if ((!(file->readable)) && (prot & PROT_READ)) {
+        return -1;
+    }
+
+    struct vma* vma = 0;
+    uint64 vend = TRAPFRAME;
+    for (int i = 0; i < NVMA; i++) {
+        struct vma* v = &p->vmas[i];
+        if (!v->valid) {
+            if (!vma) {
+                vma = v;
+                v->valid = 1;
+            }
+        } else if (v->addr < vend) {
+            vend = PGROUNDDOWN(v->addr);
+        }
+    }
+    if (!vma) {
+        printf("sys_map: unable to find free VMA\n");
+        return -1;
+    }
+
+    vma->len = length;
+    vma->prot = prot;
+    vma->flags = flags;
+    vma->file = filedup(file);
+    vma->offset = offset;
+    vma->addr = vend - PGROUNDUP(length);
+
+    return vma->addr;
+}
+
+uint64 sys_munmap(void) {
+    uint64 addr;
+    int length;
+    struct proc* p = myproc();
+
+    // Fetch arguments from user space
+    argaddr(0, &addr);
+    argint(1, &length);
+
+    struct vma* vma = 0;
+
+        // Scan the VMA list to match va
+    for (int i = 0; i < NVMA; i++) {
+      vma = &p->vmas[i];
+      if (vma->valid == 1 && addr >= vma->addr &&
+          addr < vma->addr + vma->len) {
+          break;
+      }
+    }
+    if (vma == 0) {
+        panic("sys_munmap: VMA not found.");
+    }
+
+    if (addr == vma->addr) {
+        vma->addr += length;
+        vma->len -= length;
+    } else if (addr + length == vma->addr + vma->len) {
+        vma->len -= length;
+    }
+
+    if (vma->flags == MAP_SHARED && (vma->prot & PROT_WRITE)) {
+        filewrite(vma->file, addr, length);
+    }
+
+    uvmunmap(p->pagetable, addr, PGROUNDUP(length) / PGSIZE, 1);
+
+    if (vma->len == 0) {
+        fileclose(vma->file);
+        vma->valid = 0;
+    }
+
+    return 0;
 }

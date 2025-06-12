@@ -105,6 +105,8 @@ extern uint64 sys_trace(void);
 extern uint64 sys_sysinfo(void);
 extern uint64 sys_sigalarm(void);
 extern uint64 sys_sigreturn(void);
+extern uint64 sys_mmap(void);
+extern uint64 sys_munmap(void);
 
 #ifdef LAB_NET
 extern uint64 sys_connect(void);
@@ -140,13 +142,15 @@ static uint64 (*syscalls[])(void) = {
 [SYS_trace]   sys_trace,
 [SYS_sysinfo] sys_sysinfo,
 [SYS_sigalarm] sys_sigalarm,
-[SYS_sigreturn] sys_sigreturn
+[SYS_sigreturn] sys_sigreturn,
 #ifdef LAB_NET
 [SYS_connect] sys_connect,
 #endif
 #ifdef LAB_PGTBL
 [SYS_pgaccess] sys_pgaccess,
 #endif
+[SYS_mmap]  sys_mmap,
+[SYS_munmap] sys_munmap,
 };
 
 char* syscall_names[] = {

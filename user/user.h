@@ -57,3 +57,5 @@ int atoi(const char*);
 int memcmp(const void *, const void *, uint);
 void *memcpy(void *, const void *, uint);
 int statistics(void*, int);
+void* mmap(void*, int, int, int, int, int);
+int munmap(void*, int);
