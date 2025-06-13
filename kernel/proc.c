@@ -326,6 +326,7 @@ fork(void)
   for(int i = 0; i < NVMA; i++){
     if(p->vmas[i].valid){
       memmove(&np->vmas[i], &p->vmas[i], sizeof(p->vmas[i]));
+      // np->vmas[i] = p->vmas[i];
       filedup(p->vmas[i].file);
     }
   }
@@ -366,6 +367,9 @@ reparent(struct proc *p)
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait().
+
+extern int uvmunmap_expand(pagetable_t, uint64, uint64, int, struct vma*);
+
 void
 exit(int status)
 {
@@ -373,6 +377,46 @@ exit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  for (int i = 0; i < NVMA; i++) {
+      struct vma* vma =  &p->vmas[i];
+      uint64 addr = vma->addr;
+      uint64 length = vma->len;
+      if (vma->valid) {
+        if (vma->flags == MAP_SHARED){
+          // need to write all back
+          uint64 page = PGROUNDDOWN(addr);
+        
+          for (;page < PGROUNDUP(addr + length); page += PGSIZE) {
+              pte_t *pte = walk(p->pagetable, page, 0);
+              if(pte != 0 && (*pte & PTE_D)){
+                uint64 pg_start = page >= addr ? page : addr;
+                uint64 pg_end = page + PGSIZE <= addr + length ? page + PGSIZE : addr + length;
+                if(filewrite(vma->file, pg_start, pg_end - pg_start) < 0)
+                  panic("exit: filewrite failed");
+              } 
+          }
+        }
+        if (addr == vma->addr) {
+            uint64 addr_ = PGROUNDDOWN(addr);
+            uint64 blocks = (length + addr - addr_)/PGSIZE;
+            uvmunmap_expand(p->pagetable, addr_, blocks, 1, vma);
+            vma->addr += length;
+            vma->len -= length;
+        } else if (addr + length == vma->addr + vma->len) {
+            uint64 vend = PGROUNDUP(addr + length);
+            uint64 blocks = (vend - addr)/PGSIZE;
+            uint64 addr_ = vend - blocks * PGSIZE;
+            uvmunmap_expand(p->pagetable, addr_, blocks, 1, vma);
+            vma->len -= length;
+        }
+    
+        if (vma->len == 0) {
+            fileclose(vma->file);
+            vma->valid = 0;
+        }
+      }
+  }
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){
@@ -382,18 +426,6 @@ exit(int status)
       p->ofile[fd] = 0;
     }
   }
-
-  for (int i = 0; i < NVMA; i++){
-    struct vma *v = &p->vmas[i];
-    if(v->valid){
-      if(v->flags == MAP_SHARED && (v->prot & PROT_WRITE)){
-        filewrite(v->file, v->addr, v->len);
-      }
-      fileclose(v->file);
-      uvmunmap(p->pagetable, v->addr, PGROUNDUP(v->len) / PGSIZE, 1);
-      v->valid = 0;
-    }
-  } 
 
   begin_op();
   iput(p->cwd);

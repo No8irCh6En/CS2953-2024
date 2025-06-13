@@ -72,6 +72,12 @@ makefile(const char *f)
     if (write(fd, buf, BSIZE) != BSIZE)
       err("write 0 makefile");
   }
+
+  if(n == 1){
+    if(write(fd, buf, BSIZE/2) != BSIZE/2)
+      err("write 0 makefile");
+  }
+
   if (close(fd) == -1)
     err("close");
 }

@@ -543,6 +543,8 @@ uint64 sys_mmap(void) {
         return -1;
     }
 
+
+
     vma->len = length;
     vma->prot = prot;
     vma->flags = flags;
@@ -550,8 +552,13 @@ uint64 sys_mmap(void) {
     vma->offset = offset;
     vma->addr = vend - PGROUNDUP(length);
 
+    // printf("debug: sys_mmap: addr=%p, fd=%d, file=%p, length=%d, prot=%d, flags=%d, offset=%d\n",
+    //   vma->addr, fd, file, length, prot, flags, offset);
+
     return vma->addr;
 }
+
+extern void uvmunmap_expand(pagetable_t, uint64, uint64, int, struct vma*);
 
 uint64 sys_munmap(void) {
     uint64 addr;
@@ -576,18 +583,40 @@ uint64 sys_munmap(void) {
         panic("sys_munmap: VMA not found.");
     }
 
+    // printf("debug: sys_munmap: addr=%p, length=%d, vma->addr=%p, vma->len=%d\n",
+    //        addr, length, vma->addr, vma->len);
+
+    if (vma->flags == MAP_SHARED){
+        // need to write all back
+        uint64 page = PGROUNDDOWN(addr);
+      
+        for (;page < PGROUNDUP(addr + length); page += PGSIZE) {
+            pte_t *pte = walk(p->pagetable, page, 0);
+            if(pte != 0 && (*pte & PTE_D)){
+              uint64 pg_start = page >= addr ? page : addr;
+              uint64 pg_end = page + PGSIZE <= addr + length ? page + PGSIZE : addr + length;
+              if(filewrite(vma->file, pg_start, pg_end - pg_start) < 0){
+                // printf("debug: sys_munmap: pg_start=%p, pg_end=%p, file=%p\n",
+                //        pg_start, pg_end, vma->file);
+                  return -1;
+                }
+            } 
+        }
+    }
+
     if (addr == vma->addr) {
+        uint64 addr_ = PGROUNDDOWN(addr);
+        uint64 npg = (length + addr - addr_)/PGSIZE;
+        uvmunmap_expand(p->pagetable, addr_, npg, 1, vma);
         vma->addr += length;
         vma->len -= length;
     } else if (addr + length == vma->addr + vma->len) {
+        uint64 vend = PGROUNDUP(addr + length);
+        uint64 npg = (vend - addr)/PGSIZE;
+        uint64 addr_ = vend - npg * PGSIZE;
+        uvmunmap_expand(p->pagetable, addr_, npg, 1, vma);
         vma->len -= length;
     }
-
-    if (vma->flags == MAP_SHARED && (vma->prot & PROT_WRITE)) {
-        filewrite(vma->file, addr, length);
-    }
-
-    uvmunmap(p->pagetable, addr, PGROUNDUP(length) / PGSIZE, 1);
 
     if (vma->len == 0) {
         fileclose(vma->file);

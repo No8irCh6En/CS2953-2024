@@ -7,6 +7,7 @@
 #include "fs.h"
 #include "file.h"
 #include "proc.h"
+#include "buf.h"
 
 #include "fcntl.h"
 
@@ -191,8 +192,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
     if((*pte & PTE_V) == 0)
-      // panic("uvmunmap: not mapped");
-      continue;
+      panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -201,6 +201,25 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     }
     *pte = 0;
   }
+}
+
+void uvmunmap_expand(pagetable_t pagetable, uint64 va, uint64 npages, int need_free, struct vma *vma){
+  int is_shared = (int)(vma->flags == MAP_SHARED);
+  uint64 a;
+  for (a = va; a < va + npages * PGSIZE; a += PGSIZE) {
+    pte_t *pte = walk(pagetable, a, 0);
+    if(pte == 0 || (*pte & PTE_V) == 0){
+      continue; // not mapped, nothing to do
+    }
+    if(is_shared){
+      begin_op();
+      unpin_buf(vma->file->ip, a - vma->addr);
+      end_op();
+      uvmunmap(pagetable, a, 1, 0); // leaves for buf logic
+    } else {
+      uvmunmap(pagetable, a, 1, need_free);
+    }
+  }  
 }
 
 // create an empty user page table.
@@ -476,21 +495,49 @@ int mmap_handler(uint64 va, int scause) {
     if (scause == 13 && !(vma->prot & PROT_READ)) {
         return -1;
     }
-    if (scause == 15 && !(vma->prot & PROT_WRITE)) {
+
+    // va = PGROUNDDOWN(va);
+    // void* pa = kalloc();
+    // if (pa == 0) {
+    //     panic("mmap_handler: kalloc failed");
+    // }
+    // memset(pa, 0, PGSIZE);
+
+    // struct file* f = vma->file;
+    // ilock(f->ip);
+    // readi(f->ip, 0, (uint64)pa, vma->offset + PGROUNDDOWN(va - vma->addr), PGSIZE);
+    // iunlock(f->ip);
+
+    begin_op();
+    void* pa = 0;
+    // printf("debug: mmap_handler: va=%p, vma->addr=%p, vma->len=%d, vma->file = %p\n",
+    //        va, vma->addr, vma->len, vma->file);
+    if(vma->flags == MAP_SHARED){
+      ilock(vma->file->ip);
+      struct buf* buf = readi_buf(vma->file->ip, PGROUNDDOWN(va) - vma->addr);
+      // printf("debug: mmap_handler: readi_buf returned %d\n", buf->data[0]);
+      if(buf == 0){
+        iunlock(vma->file->ip);
+        end_op();
         return -1;
-    }
+      }
 
-    va = PGROUNDDOWN(va);
-    void* pa = kalloc();
-    if (pa == 0) {
-        panic("mmap_handler: kalloc failed");
-    }
-    memset(pa, 0, PGSIZE);
+      pa = (void*)buf->data;
 
-    struct file* f = vma->file;
-    ilock(f->ip);
-    readi(f->ip, 0, (uint64)pa, vma->offset + PGROUNDDOWN(va - vma->addr), PGSIZE);
-    iunlock(f->ip);
+      iunlock(vma->file->ip);
+    } else{
+       pa = kalloc();
+      if (pa == 0) {
+          panic("mmap_handler: kalloc failed");
+      }
+      memset(pa, 0, PGSIZE);
+
+      struct file* f = vma->file;
+      ilock(f->ip);
+      readi(f->ip, 0, (uint64)pa, PGROUNDDOWN(va) - vma->addr, PGSIZE);
+      iunlock(f->ip);
+    }
+    end_op();
 
     int perm = PTE_U;
     if (vma->prot & PROT_READ) {

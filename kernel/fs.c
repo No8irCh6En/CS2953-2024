@@ -494,6 +494,27 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   return tot;
 }
 
+struct buf* readi_buf(struct inode *ip, uint off){
+  uint addr = bmap(ip, off/BSIZE);
+  if(addr == 0)
+    return 0;
+  struct buf* bp = bread(ip->dev, addr);
+  bpin(bp);
+  brelse(bp);
+  return bp;
+}
+
+void unpin_buf(struct inode* ip, uint off){
+  uint addr = bmap(ip, off/BSIZE);
+  if(addr == 0)
+    return;
+  struct buf* bp = bread(ip->dev, addr);
+
+  bunpin(bp);
+  brelse(bp);
+  
+}
+
 // Write data to inode.
 // Caller must hold ip->lock.
 // If user_src==1, then src is a user virtual address;

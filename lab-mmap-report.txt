@@ -16,7 +16,29 @@ At this level, I complete the basic part(i.e. without improvement).
 
 然后处理 munmap，先通过传入的参数把 vma->addr 和 vma->len 进行修改，然后再将其写回即可
 
-下面是 make grade：
+之后来讨论 improvement
+
+说实话，在写了improvement的时候我才发现我好像写错了（把一个 `panic` 注释掉导致能过测试）
+
+看了一下文件，感觉是比较好理解的
+
+首先重写了一个 readi 和 unpin，这是为了读入的时候只停留到得到 buf* 而不要调用 `either_copyout()`
+
+然后发现 `uvmunmap()` 里面并没有对 MAP_SHARED 进行特化，所以写了一个 `uvmunmap_expand()` 作为真正使用时的接口
+
+本质上就是分情况讨论，除了 MAP_SHARED 以外就正常处理，对于 MAP_SHARED 就用 `unpin_buf()` 减少 refcnt
+
+然后把剩下的事情交给 bcache 就可以了
+
+遇到了一个问题，感谢张仁浩同学的解答：
+
+在运行的时候，我遇到了 `read` 结果为 0x0，预期为 A，于是报错，但是我实际访问也是 A，理论上不应该报错。
+
+后来发现 addr 不知道为什么变了
+
+然后张仁浩同学提醒可能是内存对其方面的问题，于是把 uchar buf[NBUF] 改成了 uchar* buf，然后在 `binit()` 中初始化即可。
+
+下面是 make grade 的结果：
 
 (base) c0nsul86n@Off-seer:~/Code/CS2953-2024$ make grade
 make clean
@@ -67,7 +89,7 @@ riscv64-linux-gnu-objdump -t kernel/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; 
 make[1]: Leaving directory '/home/c0nsul86n/Code/CS2953-2024'
 == Test running mmaptest == 
 $ make qemu-gdb
-(2.1s) 
+(2.7s) 
 == Test   mmaptest: mmap f == 
   mmaptest: mmap f: OK 
 == Test   mmaptest: mmap private == 
@@ -86,7 +108,7 @@ $ make qemu-gdb
   mmaptest: fork_test: OK 
 == Test usertests == 
 $ make qemu-gdb
-usertests: OK (33.5s) 
+usertests: OK (46.3s) 
 == Test lab-mmap-report.txt == 
 lab-mmap-report.txt: OK 
 Score: 144/144
