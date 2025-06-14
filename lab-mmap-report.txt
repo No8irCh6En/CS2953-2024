@@ -1,4 +1,4 @@
-At this level, I complete the basic part(i.e. without improvement).
+现在已经完成 improvement
 
 在查看 mmap 的想法后，我感觉和 lazy-tag 的逻辑挺像的：
 
@@ -36,7 +36,7 @@ At this level, I complete the basic part(i.e. without improvement).
 
 后来发现 addr 不知道为什么变了
 
-然后张仁浩同学提醒可能是内存对其方面的问题，于是把 uchar buf[NBUF] 改成了 uchar* buf，然后在 `binit()` 中初始化即可。
+然后张仁浩同学提醒可能是内存对齐方面的问题，于是把 uchar buf[NBUF] 改成了 uchar* buf，然后在 `binit()` 中初始化即可。
 
 下面是 make grade 的结果：
 
